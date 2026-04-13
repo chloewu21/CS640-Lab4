@@ -61,4 +61,39 @@ public class TCPSegment {
 
         return (int) (~sum & 0xFFFF); // flip all bits and return 16-bit checksum
     }
+
+    public static TCPSegment deserialize(byte[] bytes, int length) {
+        if (length < 22) {
+            return null; // return if packet doesn't have enough bytes for header
+        }
+
+        TCPSegment segment = new TCPSegment();
+        ByteBuffer bb = ByteBuffer.wrap(bytes, 0, length);
+
+        segment.seqNum = bb.getInt();
+        segment.ackNum = bb.getInt();
+        segment.timestamp = bb.getLong();
+
+        int lenAndFlags = bb.getInt();
+        segment.length = (lenAndFlags >>> 3); // shift right by 3 to get length
+        
+        // Get flags using bitwise AND
+        segment.syn = (lenAndFlags & 0x4) != 0;
+        segment.fin = (lenAndFlags & 0x2) != 0;
+        segment.ack = (lenAndFlags & 0x1) != 0;
+
+        segment.checksum = bb.getShort() & 0xFFFF; // get checksum
+
+        int dataLength = length - 22;
+        if (dataLength > 0) {
+            segment.data = new byte[dataLength];
+            bb.get(segment.data); // transfer data bytes into segment's data array
+        }
+
+        return segment;
+    }
+
+    public static boolean verifyChecksum(byte[] bytes, int length) {
+        return calculateChecksum(bytes) == 0; // valid if checksum of entire packet is 0
+    }
 }
