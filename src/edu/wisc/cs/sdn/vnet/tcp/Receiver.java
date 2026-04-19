@@ -95,6 +95,12 @@ public class Receiver {
                 if (seg.fin) {
                     nextExpectedByte++; // consumes a sequence number
                     sendAck(packet.getAddress(), packet.getPort(), seg.timestamp, false, true);
+                    TCPSegment receiverFin = new TCPSegment();
+                    receiverFin.fin = true;
+                    receiverFin.seqNum = nextExpectedByte;
+                    receiverFin.timestamp = System.nanoTime();
+                    byte [] finPayload = receiverFin.serialize();
+                    socket.send(new DatagramPacket(finPayload, finPayload.length, packet.getAddress(), packet.getPort()));
                     connectionClosed = true;
                 }
             }

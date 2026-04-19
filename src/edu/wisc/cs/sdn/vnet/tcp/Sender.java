@@ -65,7 +65,36 @@ public class Sender {
             syn.timestamp = System.nanoTime();
             sendAndLog(syn);
             window.put(syn.seqNum, new PendingSegment(syn)); // add to in-flight window
-            nextSeqNum = 1;
+
+            // Wait for SYN-ACK before sending any data
+            boolean synAcked = false;
+            while (!synAcked) {
+                socket.setSoTimeout(1000); // wait up to 1s for SYN-ACK
+                byte[] buf = new byte[mtu];
+                DatagramPacket p = new DatagramPacket(buf, buf.length);
+                try {
+                    socket.receive(p);
+                    if (!TCPSegment.verifyChecksum(p.getData(), p.getLength())) {
+                        ackChecksumErrors++;
+                        continue; // discard if checksum is wrong
+                    }
+                    TCPSegment ack = TCPSegment.deserialize(p.getData(), p.getLength());
+                    printLog("rcv", ack);
+
+                    if (ack.ack && ack.ackNum == 1) { // valid SYN-ACK
+                        lastAckRcvd = 1;
+                        nextSeqNum = 1; // next sequence number to use for data segments is 1 since SYN consumes 1 sequence number
+                        window.remove(0); // remove SYN from window
+                        long currentTime = System.nanoTime();
+                        ertt = (double)(currentTime - syn.timestamp);
+                        edev = 0;
+                        timeout = (long)(2 * ertt);
+                        synAcked = true;
+                    }
+                } catch (SocketTimeoutException e) {
+                    retransmit(window.get(0)); // retransmit SYN if no response
+                }
+            }
 
             byte[] fileBuffer = new byte[mtu - 24]; // MTU minus header
             boolean fileReadComplete = false;
@@ -120,6 +149,24 @@ public class Sender {
                         retransmit(oldest);
                     }
                 }
+            }
+
+            // Wait for receiver's FIN
+            socket.setSoTimeout(500);
+            try {
+                DatagramPacket finalP = new DatagramPacket(new byte[mtu], mtu);
+                socket.receive(finalP);
+                TCPSegment finalSeg = TCPSegment.deserialize(finalP.getData(), finalP.getLength());
+                if (finalSeg.fin) {
+                    TCPSegment lastAck = new TCPSegment();
+                    lastAck.ack = true;
+                    lastAck.ackNum = finalSeg.seqNum + 1;
+                    lastAck.seqNum = nextSeqNum;
+                    byte[] lastPayload = lastAck.serialize();
+                    socket.send(new DatagramPacket(lastPayload, lastPayload.length, remoteAddr, remotePort));
+                }
+            } catch (SocketTimeoutException e) { 
+                
             }
 
             System.out.println(String.format("%d %d %d %d %d %d", totalDataSent, packetsSent, outOfOrderPackets, ackChecksumErrors, retransmissions, duplicateAcks));
