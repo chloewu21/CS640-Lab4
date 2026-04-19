@@ -125,6 +125,7 @@ public class Sender {
                     dataSeg.timestamp = System.nanoTime();
 
                     sendAndLog(dataSeg); // send UDP packet
+                    packetsSent++;
                     window.put(dataSeg.seqNum, new PendingSegment(dataSeg)); // add to in-flight window
                     nextSeqNum += bytesRead;
                     totalDataSent += bytesRead;
@@ -135,6 +136,7 @@ public class Sender {
                     TCPSegment fin = new TCPSegment();
                     fin.fin = true;
                     fin.ackNum = 1;
+                    fin.ack = true;
                     fin.seqNum = nextSeqNum;
                     fin.timestamp = System.nanoTime();
                     sendAndLog(fin);
@@ -236,14 +238,15 @@ public class Sender {
     private void retransmit(PendingSegment ps) throws Exception {
         ps.timeSent = System.nanoTime();
         ps.retries++;
-        retransmissions++;
+        if (ps.seg.length > 0) {
+            retransmissions++;
+        }
         sendAndLog(ps.seg);
     }
 
     private void sendAndLog(TCPSegment seg) throws Exception {
         byte[] payload = seg.serialize();
         socket.send(new DatagramPacket(payload, payload.length, remoteAddr, remotePort));
-        packetsSent++;
         printLog("snd", seg);
     }
 

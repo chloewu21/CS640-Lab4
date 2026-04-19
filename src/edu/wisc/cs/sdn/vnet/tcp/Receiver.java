@@ -51,7 +51,6 @@ public class Receiver {
                 }
 
                 TCPSegment seg = TCPSegment.deserialize(receivedBytes, packetLen); // convert to TCP segment
-                packetsReceived++;
                 printLog("rcv", seg); // received + segment info
                 
                 // Connection establishment (SYN flag)
@@ -65,6 +64,7 @@ public class Receiver {
 
                 // Data transfer
                 if (seg.length > 0) { // make sure data length is not 0
+                    packetsReceived++;
                     if (seg.seqNum == nextExpectedByte) { // in order packet
                         fileOut.write(seg.data);
                         totalReceived += seg.length;
