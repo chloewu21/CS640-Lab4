@@ -23,6 +23,7 @@ public class Receiver {
     private boolean connectionClosed = false;
     private int lastAckSent = -1; // track last ACK sent for duplicate ACK detection
     private long lastInOrderTimestamp = 0;
+    private int nextSeqNum = 0; 
 
     public Receiver(DatagramSocket socket, String fileName, int mtu, int sws) {
         this.socket = socket;
@@ -34,7 +35,7 @@ public class Receiver {
 
     public void start() {
         try (FileOutputStream fileOut = new FileOutputStream(fileName)) {
-            byte[] incomingBytes = new byte[mtu]; // allocate maximum size buffer
+            byte[] incomingBytes = new byte[mtu + 24]; // allocate maximum size buffer
             
             while (!connectionClosed) {
                 DatagramPacket packet = new DatagramPacket(incomingBytes, incomingBytes.length);
@@ -118,10 +119,13 @@ public class Receiver {
         ackSeg.ack = true;
         ackSeg.syn = isSyn;
         ackSeg.fin = isFin;
-        ackSeg.seqNum = 1;
+        ackSeg.seqNum = nextSeqNum;
         ackSeg.ackNum = nextExpectedByte;
         ackSeg.timestamp = timestamp;
         ackSeg.length = 0;
+        if (isSyn || isFin) {
+            nextSeqNum++; // SYN and FIN consume a sequence number
+        }
         byte[] payload = ackSeg.serialize();
         socket.send(new DatagramPacket(payload, payload.length, address, port));
         lastAckSent = ackSeg.ackNum; // update last ACK sent for duplicate ACK detection

@@ -96,7 +96,7 @@ public class Sender {
                 }
             }
 
-            byte[] fileBuffer = new byte[mtu - 24]; // MTU minus header
+            byte[] fileBuffer = new byte[mtu];
             boolean fileReadComplete = false;
 
             while (!finAcked) {
@@ -166,7 +166,7 @@ public class Sender {
                     socket.send(new DatagramPacket(lastPayload, lastPayload.length, remoteAddr, remotePort));
                 }
             } catch (SocketTimeoutException e) { 
-                
+
             }
 
             System.out.println(String.format("%d %d %d %d %d %d", totalDataSent, packetsSent, outOfOrderPackets, ackChecksumErrors, retransmissions, duplicateAcks));
