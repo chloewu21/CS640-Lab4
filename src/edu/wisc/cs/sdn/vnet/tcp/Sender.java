@@ -89,6 +89,13 @@ public class Sender {
                         ertt = (double)(currentTime - syn.timestamp);
                         edev = 0;
                         timeout = (long)(2 * ertt);
+
+                        TCPSegment handshakeAck = new TCPSegment();
+                        handshakeAck.ack = true;
+                        handshakeAck.ackNum = ack.seqNum + 1; // ACK the SYN-ACK by acknowledging the SYN-ACK's sequence number + 1
+                        handshakeAck.seqNum = nextSeqNum; // use nextSeqNum for ACK segment
+                        handshakeAck.timestamp = System.nanoTime();
+                        sendAndLog(handshakeAck);
                         synAcked = true;
                     }
                 } catch (SocketTimeoutException e) {
@@ -127,6 +134,7 @@ public class Sender {
                 if (fileReadComplete && window.isEmpty() && !finSent) {
                     TCPSegment fin = new TCPSegment();
                     fin.fin = true;
+                    fin.ackNum = 1;
                     fin.seqNum = nextSeqNum;
                     fin.timestamp = System.nanoTime();
                     sendAndLog(fin);
@@ -149,24 +157,6 @@ public class Sender {
                         retransmit(oldest);
                     }
                 }
-            }
-
-            // Wait for receiver's FIN
-            socket.setSoTimeout(500);
-            try {
-                DatagramPacket finalP = new DatagramPacket(new byte[mtu], mtu);
-                socket.receive(finalP);
-                TCPSegment finalSeg = TCPSegment.deserialize(finalP.getData(), finalP.getLength());
-                if (finalSeg.fin) {
-                    TCPSegment lastAck = new TCPSegment();
-                    lastAck.ack = true;
-                    lastAck.ackNum = finalSeg.seqNum + 1;
-                    lastAck.seqNum = nextSeqNum;
-                    byte[] lastPayload = lastAck.serialize();
-                    socket.send(new DatagramPacket(lastPayload, lastPayload.length, remoteAddr, remotePort));
-                }
-            } catch (SocketTimeoutException e) { 
-
             }
 
             System.out.println(String.format("%d %d %d %d %d %d", totalDataSent, packetsSent, outOfOrderPackets, ackChecksumErrors, retransmissions, duplicateAcks));
@@ -218,6 +208,12 @@ public class Sender {
                     }
                     
                     if (finSent && ack.ackNum == nextSeqNum) {
+                        TCPSegment finAck = new TCPSegment();
+                        finAck.ack = true;
+                        finAck.ackNum = ack.seqNum + 1; // ACK the FIN-ACK by acknowledging the FIN-ACK's sequence number + 1
+                        finAck.seqNum = nextSeqNum; // use nextSeqNum for ACK segment
+                        finAck.timestamp = System.nanoTime();
+                        sendAndLog(finAck);
                         finAcked = true; // if we receive an ACK that acknowledges the FIN, connection is closed
                     }
                 } 
