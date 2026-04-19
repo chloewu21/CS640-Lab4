@@ -17,7 +17,7 @@ public class TCPSegment {
     }
 
     public byte[] serialize() { // convert object into byte array for UDP transmission
-        ByteBuffer bb = ByteBuffer.allocate(22 + data.length); // header length + data length
+        ByteBuffer bb = ByteBuffer.allocate(24 + data.length); // header length + data length
         bb.putInt(seqNum);
         bb.putInt(ackNum);
         bb.putLong(timestamp);
@@ -27,15 +27,14 @@ public class TCPSegment {
         if (fin) lengthAndFlags |= 0x2; // 010
         if (ack) lengthAndFlags |= 0x1; // 001
         bb.putInt(lengthAndFlags);
-        
-        bb.putShort((short) 0); // placeholder for checksum
+        bb.putInt(0); // placeholder for checksum
         bb.put(data);
         
         byte[] result = bb.array();
         int calculatedChecksum = calculateChecksum(result);
         // Insert checksum into correct position
-        result[20] = (byte) ((calculatedChecksum >> 8) & 0xFF);
-        result[21] = (byte) (calculatedChecksum & 0xFF);
+        result[22] = (byte) ((calculatedChecksum >> 8) & 0xFF);
+        result[23] = (byte) (calculatedChecksum & 0xFF);
         
         return result;
     }
@@ -46,13 +45,13 @@ public class TCPSegment {
         long sum = 0;
 
         while (length > 1) { // combine two 8-bit bytes into one 16-bit word
-            sum += (((buf[i] << 8) & 0xFF00) | (buf[i + 1] & 0xFF));
+            sum += (((buf[i] & 0xFF) << 8) | (buf[i + 1] & 0xFF));
             i += 2;
             length -= 2;
         }
 
         if (length > 0) {
-            sum += (buf[i] << 8 & 0xFF00);
+            sum += ((buf[i] & 0xFF) << 8);
         }
 
         while ((sum >> 16) > 0) { // wrap around carry bits
@@ -63,7 +62,7 @@ public class TCPSegment {
     }
 
     public static TCPSegment deserialize(byte[] bytes, int length) {
-        if (length < 22) {
+        if (length < 24) {
             return null; // return if packet doesn't have enough bytes for header
         }
 
@@ -82,9 +81,9 @@ public class TCPSegment {
         segment.fin = (lenAndFlags & 0x2) != 0;
         segment.ack = (lenAndFlags & 0x1) != 0;
 
-        segment.checksum = bb.getShort() & 0xFFFF; // get checksum
+        segment.checksum = bb.getInt(); // get checksum
 
-        int dataLength = length - 22;
+        int dataLength = length - 24;
         if (dataLength > 0) {
             segment.data = new byte[dataLength];
             bb.get(segment.data); // transfer data bytes into segment's data array

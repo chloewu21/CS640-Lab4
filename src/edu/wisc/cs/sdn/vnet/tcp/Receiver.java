@@ -22,6 +22,7 @@ public class Receiver {
     private long startTime;
     private boolean connectionClosed = false;
     private int lastAckSent = -1; // track last ACK sent for duplicate ACK detection
+    private long lastInOrderTimestamp = 0;
 
     public Receiver(DatagramSocket socket, String fileName, int mtu, int sws) {
         this.socket = socket;
@@ -57,7 +58,7 @@ public class Receiver {
                     if (nextExpectedByte == 0) { // check if this is the first SYN
                         nextExpectedByte = 1; // SYN consumes 1 sequence number
                     }
-                    sendAck(packet.getAddress(), packet.getPort(), seg, true, false);
+                    sendAck(packet.getAddress(), packet.getPort(), seg.timestamp, true, false);
                     continue;
                 }
 
@@ -67,12 +68,14 @@ public class Receiver {
                         fileOut.write(seg.data);
                         totalReceived += seg.length;
                         nextExpectedByte += seg.length;
+                        lastInOrderTimestamp = seg.timestamp;
 
                         while (buffer.containsKey(nextExpectedByte)) { // check if next expected is in buffer
                             TCPSegment buffered = buffer.remove(nextExpectedByte);
                             fileOut.write(buffered.data);
                             totalReceived += buffered.length;
                             nextExpectedByte += buffered.length;
+                            lastInOrderTimestamp = buffered.timestamp;
                         }
                     } 
                     else if (seg.seqNum > nextExpectedByte) { // out of order packets
@@ -85,13 +88,13 @@ public class Receiver {
                     if (nextExpectedByte == lastAckSent) {
                         duplicateAcks++; // send a duplicate ACK if we receive a packet that doesn't advance the expected byte
                     }
-                    sendAck(packet.getAddress(), packet.getPort(), seg, false, false);
+                    sendAck(packet.getAddress(), packet.getPort(), lastInOrderTimestamp, false, false);
                 }
 
                 // Connection teardown
                 if (seg.fin) {
                     nextExpectedByte++; // consumes a sequence number
-                    sendAck(packet.getAddress(), packet.getPort(), seg, false, true);
+                    sendAck(packet.getAddress(), packet.getPort(), seg.timestamp, false, true);
                     connectionClosed = true;
                 }
             }
@@ -104,14 +107,14 @@ public class Receiver {
         }
     }
 
-    private void sendAck(InetAddress address, int port, TCPSegment seg, boolean isSyn, boolean isFin) throws Exception {
+    private void sendAck(InetAddress address, int port, long timestamp, boolean isSyn, boolean isFin) throws Exception {
         TCPSegment ackSeg = new TCPSegment();
         ackSeg.ack = true;
         ackSeg.syn = isSyn;
         ackSeg.fin = isFin;
         ackSeg.seqNum = 1;
         ackSeg.ackNum = nextExpectedByte;
-        ackSeg.timestamp = seg.timestamp;
+        ackSeg.timestamp = timestamp;
         ackSeg.length = 0;
         byte[] payload = ackSeg.serialize();
         socket.send(new DatagramPacket(payload, payload.length, address, port));

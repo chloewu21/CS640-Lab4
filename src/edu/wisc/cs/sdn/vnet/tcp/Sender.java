@@ -67,7 +67,7 @@ public class Sender {
             window.put(syn.seqNum, new PendingSegment(syn)); // add to in-flight window
             nextSeqNum = 1;
 
-            byte[] fileBuffer = new byte[mtu - 22]; // MTU minus header
+            byte[] fileBuffer = new byte[mtu - 24]; // MTU minus header
             boolean fileReadComplete = false;
 
             while (!finAcked) {
@@ -102,6 +102,7 @@ public class Sender {
                     fin.timestamp = System.nanoTime();
                     sendAndLog(fin);
                     window.put(fin.seqNum, new PendingSegment(fin));
+                    nextSeqNum++; // FIN also consumes 1 sequence number
                     finSent = true;
                 }
 
@@ -116,9 +117,7 @@ public class Sender {
                             System.err.println("Error: Max retransmissions reached.");
                             System.exit(1);
                         }
-                        for (PendingSegment ps : window.values()) {
-                            retransmit(ps); // retransmit all in-flight segments on timeout (Go-Back-N)
-                        }
+                        retransmit(oldest);
                     }
                 }
             }
@@ -156,21 +155,22 @@ public class Sender {
                     }
                     
                     // Update ERTT, EDEV, and timeout
-                    long time = System.nanoTime();
-                    if (ertt == -1) { // first packet (SYN ACK)
-                        ertt = (time - ack.timestamp); // round trip time
+                    long currentTime = System.nanoTime();
+                    double sampleRTT = (double)(currentTime - ack.timestamp);
+
+                    if (lastAckRcvd == 1 && ertt == -1) {  // first ACK, next expected is 1 (SYN acknowledged)
+                        ertt = sampleRTT;
                         edev = 0;
                         timeout = (long)(2 * ertt);
-                    }
-                    else {
-                        double srtt = (time - ack.timestamp); // sample round trip time
-                        double sdev = Math.abs(srtt - ertt); // sample deviation
-                        ertt = 0.875 * ertt + 0.125 * srtt; // update estimated round trip time
-                        edev = 0.75 * edev + 0.25 * sdev; // update estimated deviation
-                        timeout = (long)(ertt + 4 * edev); // update timeout based on ERTT and EDEV
+                    } 
+                    else { // all subsequent packets
+                        double sampleDev = Math.abs(sampleRTT - ertt);
+                        ertt = (0.875 * ertt) + (0.125 * sampleRTT);
+                        edev = (0.75 * edev) + (0.25 * sampleDev);
+                        timeout = (long)(ertt + 4 * edev);
                     }
                     
-                    if (finSent && ack.ackNum > nextSeqNum) {
+                    if (finSent && ack.ackNum == nextSeqNum) {
                         finAcked = true; // if we receive an ACK that acknowledges the FIN, connection is closed
                     }
                 } 
