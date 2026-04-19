@@ -30,13 +30,15 @@ public class TCPend {
         }
 
         try {
-            DatagramSocket socket = new DatagramSocket(port); // create UDP socket
+            DatagramSocket socket;
             
             if (remoteIP != null) { // sender mode if remote IP is provided
+                socket = new DatagramSocket(); // bind to any available port
                 InetAddress remoteAddr = InetAddress.getByName(remoteIP);
                 Sender sender = new Sender(socket, remoteAddr, remotePort, fileName, mtu, sws);
                 sender.start();
             } else { // receiver mode if no remote IP is provided
+                socket = new DatagramSocket(port);
                 Receiver receiver = new Receiver(socket, fileName, mtu, sws);
                 receiver.start();
             }
