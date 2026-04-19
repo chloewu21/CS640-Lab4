@@ -1,5 +1,5 @@
 JC = javac
-JFLAGS = -g -d src -cp src
+JFLAGS = -g -cp src
 SRCDIR = src
 
 SOURCES := $(shell find $(SRCDIR) -name "*.java")
